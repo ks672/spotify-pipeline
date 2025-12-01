@@ -1,0 +1,89 @@
+--Set up new db and schemas
+create or replace database spotify_db;
+create or replace schema spotify_db.raw;
+create or replace schema spotify_db.enhanced;
+
+---------------------------------------------
+--1.Set up the integrations and file format--
+---------------------------------------------
+
+--Create integration for new stage
+CREATE OR REPLACE STORAGE INTEGRATION spotify_azure_integration
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = AZURE
+  AZURE_TENANT_ID = '408288e8-706a-4691-9230-9f84850f5307'
+  ENABLED = TRUE
+  STORAGE_ALLOWED_LOCATIONS = ('azure://kamilstorage123.blob.core.windows.net/spotify-raw');
+
+--Create notification integration so that snowflake can receive events from Azure Event Grid
+CREATE NOTIFICATION INTEGRATION spotify_event_integration
+  ENABLED = true
+  TYPE = QUEUE
+  NOTIFICATION_PROVIDER = AZURE_STORAGE_QUEUE
+  AZURE_STORAGE_QUEUE_PRIMARY_URI = 'https://kamilstorage123.queue.core.windows.net/spotify-queue'
+  AZURE_TENANT_ID = '408288e8-706a-4691-9230-9f84850f5307';
+
+  desc NOTIFICATION INTEGRATION spotify_event_integration;
+
+--Get the Azure AD principal Snowflake uses
+DESC STORAGE INTEGRATION spotify_azure_integration;
+
+--Create a file format
+create OR REPLACE file format spotify_db.raw.json_file
+    type = JSON
+    strip_outer_array = true;
+
+
+
+
+------------------------------------------
+--2.Create stage, raw tables and sf pipe--
+------------------------------------------
+
+--Create a new spotify stage
+CREATE OR REPLACE STAGE spotify_db.raw.new_releases_stage
+  STORAGE_INTEGRATION = spotify_azure_integration
+  URL = 'azure://kamilstorage123.blob.core.windows.net/spotify-raw/new_releases_raw/'
+  FILE_FORMAT = spotify_db.raw.json_file;
+
+list @spotify_db.raw.new_releases_stage;
+
+
+--Create a table that will hold the raw json data
+CREATE OR REPLACE TABLE spotify_db.raw.new_releases (
+  file_name  STRING,
+  load_timestamp  TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+  raw        VARIANT
+);
+
+
+--Create an event driven pipe that will load raw json data into snowflake table
+CREATE OR REPLACE PIPE spotify_db.raw.new_releases_pipe
+  AUTO_INGEST = TRUE
+  INTEGRATION = spotify_event_integration
+  AS
+  COPY INTO spotify_db.raw.new_releases (file_name, raw)
+  FROM (
+    SELECT METADATA$FILENAME, PARSE_JSON($1)
+    FROM @spotify_db.raw.new_releases_stage
+  )
+  FILE_FORMAT = (FORMAT_NAME = 'json_file');
+
+desc pipe spotify_db.raw.new_releases_pipe;
+
+
+SELECT METADATA$FILENAME, PARSE_JSON($1)
+    FROM @spotify_db.raw.new_releases_stage;
+
+
+select * from spotify_db.raw.new_releases;
+
+-- inspect pending / loaded files status
+SELECT * FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
+-- or check pipe status:
+SELECT SYSTEM$PIPE_STATUS('spotify_db.raw.new_releases_pipe');
+-- list files in stage:
+LIST @spotify_db.raw.new_releases_stage;
+-- check raw table:
+SELECT COUNT(*) FROM spotify_db.raw.new_releases;
+SELECT * FROM spotify_db.raw.new_releases ORDER BY load_timestamp desc;
