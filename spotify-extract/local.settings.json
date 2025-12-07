@@ -1,0 +1,8 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;AccountName=kamilstorage123;AccountKey=zyJ2rvLdh1j735y6pIierjwjtyoS2k3DCM8X8W5jaCtCgdR5RXNv6IxQ0gyFDht2s8KWEtgWTGw8+ASt7T0QWQ==;EndpointSuffix=core.windows.net",
+    "AzureWebJobsFeatureFlags": "EnableWorkerIndexing",
+    "FUNCTIONS_WORKER_RUNTIME": "python"
+  }
+}
