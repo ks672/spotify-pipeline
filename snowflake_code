@@ -23,7 +23,7 @@ CREATE NOTIFICATION INTEGRATION spotify_event_integration
   AZURE_STORAGE_QUEUE_PRIMARY_URI = 'https://kamilstorage123.queue.core.windows.net/spotify-queue'
   AZURE_TENANT_ID = '408288e8-706a-4691-9230-9f84850f5307';
 
-  desc NOTIFICATION INTEGRATION spotify_event_integration;
+desc NOTIFICATION INTEGRATION spotify_event_integration;
 
 --Get the Azure AD principal Snowflake uses
 DESC STORAGE INTEGRATION spotify_azure_integration;
@@ -87,3 +87,122 @@ LIST @spotify_db.raw.new_releases_stage;
 -- check raw table:
 SELECT COUNT(*) FROM spotify_db.raw.new_releases;
 SELECT * FROM spotify_db.raw.new_releases ORDER BY load_timestamp desc;
+
+
+
+
+
+
+
+
+---------------------------------
+--GLOBAL 100 PLAYLIST INGESTION--
+---------------------------------
+
+
+--1. Playlist core data
+        --Create a new spotify stage
+        CREATE OR REPLACE STAGE spotify_db.raw.global_100_playlist_stage
+          STORAGE_INTEGRATION = spotify_azure_integration
+          URL = 'azure://kamilstorage123.blob.core.windows.net/spotify-raw/global_100/playlist/'
+          FILE_FORMAT = spotify_db.raw.json_file;
+
+
+        SELECT METADATA$FILENAME, PARSE_JSON($1)
+        FROM @spotify_db.raw.global_100_playlist_stage;
+        
+        
+        --Create a table that will hold the raw json data
+        CREATE OR REPLACE TABLE spotify_db.raw.global_100_playlist_jsons (
+          file_name  STRING,
+          load_timestamp  TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+          raw        VARIANT
+        );
+        --Create an event driven pipe that will load raw json data into snowflake table
+        CREATE OR REPLACE PIPE spotify_db.raw.global_100_playlist_pipe
+          AUTO_INGEST = TRUE
+          INTEGRATION = spotify_event_integration
+          AS
+          COPY INTO spotify_db.raw.global_100_playlist_jsons (file_name, raw)
+          FROM (
+            SELECT METADATA$FILENAME, PARSE_JSON($1)
+            FROM @spotify_db.raw.global_100_playlist_stage
+          )
+          FILE_FORMAT = (FORMAT_NAME = 'json_file');
+
+
+        SELECT * FROM spotify_db.raw.global_100_playlist_jsons;
+
+           -- select TO_VARCHAR(CURRENT_DATE(),'YYYYMMDD');
+
+
+--2. Artists details data
+
+        --Create a new spotify stage
+        CREATE OR REPLACE STAGE spotify_db.raw.global_100_artists_stage
+          STORAGE_INTEGRATION = spotify_azure_integration
+          URL = 'azure://kamilstorage123.blob.core.windows.net/spotify-raw/global_100/artists/'
+          FILE_FORMAT = spotify_db.raw.json_file;
+
+
+        SELECT METADATA$FILENAME, PARSE_JSON($1)
+        FROM @spotify_db.raw.global_100_artists_stage;
+        
+        
+        --Create a table that will hold the raw json data
+        CREATE OR REPLACE TABLE spotify_db.raw.global_100_artists_jsons (
+          file_name  STRING,
+          load_timestamp  TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+          raw        VARIANT
+        );
+        --Create an event driven pipe that will load raw json data into snowflake table
+        CREATE OR REPLACE PIPE spotify_db.raw.global_100_artists_pipe
+          AUTO_INGEST = TRUE
+          INTEGRATION = spotify_event_integration
+          AS
+          COPY INTO spotify_db.raw.global_100_artists_jsons (file_name, raw)
+          FROM (
+            SELECT METADATA$FILENAME, PARSE_JSON($1)
+            FROM @spotify_db.raw.global_100_artists_stage
+          )
+          FILE_FORMAT = (FORMAT_NAME = 'json_file');
+
+
+        SELECT * FROM spotify_db.raw.global_100_artists_jsons;
+
+--3. Tracks details data
+
+        --Create a new spotify stage
+        CREATE OR REPLACE STAGE spotify_db.raw.global_100_tracks_stage
+          STORAGE_INTEGRATION = spotify_azure_integration
+          URL = 'azure://kamilstorage123.blob.core.windows.net/spotify-raw/global_100/tracks/'
+          FILE_FORMAT = spotify_db.raw.json_file;
+
+
+        SELECT METADATA$FILENAME, PARSE_JSON($1)
+        FROM @spotify_db.raw.global_100_tracks_stage;
+        
+        
+        --Create a table that will hold the raw json data
+        CREATE OR REPLACE TABLE spotify_db.raw.global_100_tracks_jsons (
+          file_name  STRING,
+          load_timestamp  TIMESTAMP_LTZ DEFAULT CURRENT_TIMESTAMP(),
+          raw        VARIANT
+        );
+        --Create an event driven pipe that will load raw json data into snowflake table
+        CREATE OR REPLACE PIPE spotify_db.raw.global_100_tracks_pipe
+          AUTO_INGEST = TRUE
+          INTEGRATION = spotify_event_integration
+          AS
+          COPY INTO spotify_db.raw.global_100_tracks_jsons (file_name, raw)
+          FROM (
+            SELECT METADATA$FILENAME, PARSE_JSON($1)
+            FROM @spotify_db.raw.global_100_tracks_stage
+          )
+          FILE_FORMAT = (FORMAT_NAME = 'json_file');
+
+
+        SELECT * FROM spotify_db.raw.global_100_tracks_jsons;
+
+
+
